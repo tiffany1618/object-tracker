@@ -20,6 +20,7 @@ def track_objects(video_path):
         ret, next_frame = cap.read()
         next_gray = cv.cvtColor(next_frame, cv.COLOR_BGR2GRAY)
 
+        # Find average movement of background using obj_box
         prev_box, next_box = lucas_kanade(prev_gray, next_gray, obj_box)
         num_pts = 0
         delta = np.array([0.0, 0.0])
@@ -28,21 +29,19 @@ def track_objects(video_path):
                 num_pts += 1
                 delta[0] += next_box[i][0] - point[0]
                 delta[1] += next_box[i][1] - point[1]
-
         if num_pts < 0:
             delta[0] /= float(num_pts)
             delta[1] /= float(num_pts)
 
+        # Calculate movement vector as difference between background and object movement
         prev_center, next_center = lucas_kanade(prev_gray, next_gray, obj_center)
         delta -= next_center[0] - prev_center[0]
-        print(delta)
-
-        prev_box = np.array([pts[0] for pts in obj_box])
 
         # Display
         img = np.copy(prev_frame)
-        cv.drawContours(img, [np.int0(prev_box)], 0, (0, 255, 0), 2)
-        cv.circle(img, util.find_rect_center(prev_box).astype(np.int), 3, (0, 255, 0), -1)
+        rect = np.array([pts[0] for pts in obj_box])
+        cv.drawContours(img, [np.int0(rect)], 0, (0, 255, 0), 2)
+        cv.circle(img, util.find_rect_center(rect).astype(np.int), 3, (0, 255, 0), -1)
         center = np.int0([pts[0] for pts in obj_center])
         delta = (-10 * delta).astype(np.int)
         cv.arrowedLine(img, (center[0][0], center[0][1]), (center[0][0] + delta[0], center[0][1] + delta[1]), (0, 0, 255), 2)
@@ -54,7 +53,8 @@ def track_objects(video_path):
         if math.dist(prev_center[0], next_center[0]) > 5:
             _, obj_box, obj_center = extract_object(prev_frame, next_frame)
         else:
-            obj_box = np.array([[(next_center[0] - prev_center[0]) + pts] for pts in prev_box])
+            # Object has moved too much, so recalculate the object
+            obj_box = np.array([[(next_center[0] - prev_center[0]) + pts[0]] for pts in obj_box])
             obj_center = next_center.reshape(-1, 1, 2)
 
         prev_gray = next_gray.copy()
@@ -96,6 +96,7 @@ def lucas_kanade(prev_frame, next_frame, prev_pts):
     return prev_good, next_good
 
 
+# Extract the object with the greatest difference in movement between the object itself and its background
 def extract_object(prev_frame, next_frame):
     obj_index = 0
     obj_box = []
